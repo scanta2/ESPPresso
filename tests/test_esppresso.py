@@ -198,9 +198,10 @@ class TestTickerExtraction(unittest.TestCase):
         self.assertIsNone(ESPPresso._extract_ticker("Assets:Brokerage:HOOLI", pattern))
 
     def test_no_ticker_placeholder(self):
-        # A fixed (non-parameterised) template matches the account but has no ticker group
+        # A fixed (non-parameterised) template matches the account and returns ""
         pattern = ESPPresso._ticker_pattern("Assets:ESPP:FIXED")
-        self.assertIsNone(ESPPresso._extract_ticker("Assets:ESPP:FIXED", pattern))
+        self.assertEqual(ESPPresso._extract_ticker("Assets:ESPP:FIXED", pattern), "")
+        # A different account does not match at all → None
         self.assertIsNone(ESPPresso._extract_ticker("Assets:ESPP:OTHER", pattern))
 
 
@@ -464,6 +465,103 @@ class TestMultipleTickers(unittest.TestCase):
         txn = _sell_txn(self.entries, "Sell ACME")
         p = _posting(txn, "Income:Capital-Gain:ACME")
         self.assertEqual(p.units.number, Decimal("-100"))
+
+
+class TestFixedAccountConfig(unittest.TestCase):
+    """Config with no {ticker} placeholder — all accounts are named literally."""
+
+    FIXED_CONFIG = (
+        "[{'Asset': 'Assets:ESPP:HOOLI', "
+        "'CapGain': 'Income:Capital-Gain:HOOLI', "
+        "'OrdIncome': 'Income:Ordinary'}]"
+    )
+
+    def _build(self, sell_price, qualifying=True):
+        # qualifying: sell 2+ years after grant, 1+ year after purchase
+        sell_date = "2026-02-01" if qualifying else "2024-06-01"
+        text = "\n".join([
+            f'plugin "ESPPresso" "{self.FIXED_CONFIG}"',
+            "",
+            "2020-01-01 open Assets:ESPP:HOOLI HOOLI",
+            "2020-01-01 open Assets:ESPP:Cash USD",
+            "2020-01-01 open Income:Capital-Gain:HOOLI USD",
+            "2020-01-01 open Income:Ordinary USD",
+            "",
+            "2024-01-31 * \"Buy\"",
+            "  Assets:ESPP:HOOLI 1 HOOLI {90 USD}",
+            "    grant_date: 2023-08-01",
+            "    fmv_grant: 100 USD",
+            "    fmv_acquisition: 200 USD",
+            "    discount: 10",
+            "  Assets:ESPP:Cash -90 USD",
+            "",
+            f'{sell_date} * "Sell"',
+            f"  Assets:ESPP:HOOLI -1 HOOLI {{90 USD, 2024-01-31}} @ {sell_price} USD",
+            "  Assets:ESPP:Cash 200 USD",
+            "  Income:Capital-Gain:HOOLI",
+        ])
+        return loader.load_string(text)
+
+    def test_qualifying_no_errors(self):
+        _, errors, _ = self._build(200)
+        self.assertEqual([], errors)
+
+    def test_qualifying_ordinary_income(self):
+        entries, _, _ = self._build(200)
+        txn = _sell_txn(entries)
+        p = _posting(txn, "Income:Ordinary")
+        self.assertIsNotNone(p, "Expected Income:Ordinary posting")
+        # plan_discount = 100 × 10% = 10 USD
+        self.assertEqual(p.units.number, Decimal("-10"))
+
+    def test_qualifying_capital_gain(self):
+        entries, _, _ = self._build(200)
+        txn = _sell_txn(entries)
+        p = _posting(txn, "Income:Capital-Gain:HOOLI")
+        # -110 + 10 = -100
+        self.assertEqual(p.units.number, Decimal("-100"))
+
+    def test_disqualifying_ordinary_income(self):
+        entries, errors, _ = self._build(200, qualifying=False)
+        self.assertEqual([], errors)
+        txn = _sell_txn(entries)
+        p = _posting(txn, "Income:Ordinary")
+        # bargain_element = 200 - 90 = 110
+        self.assertEqual(p.units.number, Decimal("-110"))
+
+    def test_unrelated_account_not_matched(self):
+        """A different asset account is not touched by a fixed-account config."""
+        text = "\n".join([
+            f'plugin "ESPPresso" "{self.FIXED_CONFIG}"',
+            "",
+            "2020-01-01 open Assets:ESPP:HOOLI HOOLI",
+            "2020-01-01 open Assets:ESPP:ACME ACME",
+            "2020-01-01 open Assets:ESPP:Cash USD",
+            "2020-01-01 open Income:Capital-Gain:HOOLI USD",
+            "2020-01-01 open Income:Capital-Gain:ACME USD",
+            "2020-01-01 open Income:Ordinary USD",
+            "",
+            # ACME buy — has ESPP metadata but ACME is not in the fixed config
+            "2024-01-31 * \"Buy ACME\"",
+            "  Assets:ESPP:ACME 1 ACME {90 USD}",
+            "    grant_date: 2023-08-01",
+            "    fmv_grant: 100 USD",
+            "    fmv_acquisition: 200 USD",
+            "    discount: 10",
+            "  Assets:ESPP:Cash -90 USD",
+            "",
+            "2026-02-01 * \"Sell ACME\"",
+            "  Assets:ESPP:ACME -1 ACME {90 USD, 2024-01-31} @ 200 USD",
+            "  Assets:ESPP:Cash 200 USD",
+            "  Income:Capital-Gain:ACME",
+        ])
+        entries, errors, _ = loader.load_string(text)
+        self.assertEqual([], errors)
+        txn = _sell_txn(entries, "Sell ACME")
+        # No ordinary income — ACME is not in the fixed config
+        self.assertIsNone(_posting(txn, "Income:Ordinary"))
+        p = _posting(txn, "Income:Capital-Gain:ACME")
+        self.assertEqual(p.units.number, Decimal("-110"))
 
 
 class TestEmptyConfig(unittest.TestCase):

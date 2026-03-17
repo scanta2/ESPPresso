@@ -69,18 +69,32 @@ def _ticker_pattern(template):
 
 
 def _extract_ticker(account, pattern):
-    """Return the ticker captured from *account* using a compiled pattern, or None."""
+    """Return the ticker captured from *account* using a compiled pattern.
+
+    Returns:
+      None  – the account does not match the pattern at all.
+      ""    – the account matches but the pattern has no ``{ticker}`` group
+              (i.e. a fixed-account configuration with no ticker placeholder).
+      str   – the captured ticker string.
+    """
     m = pattern.match(account)
     if not m:
         return None
     try:
         return m.group("ticker")
     except IndexError:
-        return None
+        return ""
 
 
 def _resolve(template, ticker):
-    """Replace ``{ticker}`` in *template* with the actual *ticker* string."""
+    """Replace ``{ticker}`` in *template* with the actual *ticker* string.
+
+    When *ticker* is falsy (``None`` or ``""``) the template is returned
+    unchanged — this covers fixed-account configurations that contain no
+    ``{ticker}`` placeholder.
+    """
+    if not ticker:
+        return template
     return template.replace("{ticker}", ticker)
 
 
