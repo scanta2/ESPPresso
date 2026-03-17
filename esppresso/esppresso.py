@@ -1,4 +1,4 @@
-"""ESPPresso: Beancount plugin to compute ordinary income for ESPP dispositions.
+"""esprresso: Beancount plugin to compute ordinary income for ESPP dispositions.
 
 Handles Section 423 ESPP (Employee Stock Purchase Plan) tax rules:
   - Qualifying disposition: sold > 2 years after grant date AND > 1 year after purchase date
@@ -17,7 +17,7 @@ where:
 
 Configuration in your beancount file:
 
-  plugin "ESPPresso" "[{'Asset': 'Assets:ESPP:{ticker}', 'CapGain': 'Income:Capital-Gain:{ticker}', 'OrdIncome': 'Income:Ordinary'}]"
+  plugin "esprresso" "[{'Asset': 'Assets:ESPP:{ticker}', 'CapGain': 'Income:Capital-Gain:{ticker}', 'OrdIncome': 'Income:Ordinary'}]"
 
 Multiple ESPP plans are supported by listing multiple config dicts in the array.
 
@@ -192,24 +192,31 @@ def _compute_income(
     (already multiplied by *quantity*) and are *positive* values representing
     income / gain (or negative for a loss on capital_gain).
 
-    Algorithm (same structure for both disposition types):
-      benefit          = plan_discount (qualifying)
-                       | bargain_element (disqualifying)
-      actual_gain      = (sale_price - purchase_price) * quantity
-      ordinary_income  = max(0, min(actual_gain, benefit * quantity))
-      capital_gain     = actual_gain - ordinary_income
+        Algorithm:
+            - actual_gain is the total realized gain: (sale_price - purchase_price) * quantity
+            - For a qualifying disposition:
+                    * benefit = plan_discount = fmv_grant * (discount_pct / 100)
+                    * ordinary_income = max(0, min(actual_gain, benefit * quantity))
+            - For a disqualifying disposition:
+                    * benefit = bargain_element = (fmv_acquisition - purchase_price)
+                    * ordinary_income = benefit * quantity
+            - capital_gain = actual_gain - ordinary_income
+
+        Notes:
+            - All price/income values in the arguments are per-share values; the
+                returned `ordinary_income` and `capital_gain` are total amounts already
+                multiplied by `quantity`.
+            - `ordinary_income` may be zero when the sale is at a loss; `capital_gain`
+                will be negative for a capital loss.
     """
     actual_gain = (sale_price - purchase_price) * quantity
 
     if qualifying:
         benefit = fmv_grant * (discount_pct / Decimal("100")) * quantity
+        ordinary_income = max(0,min(actual_gain, benefit))
     else:
         benefit = (fmv_acquisition - purchase_price) * quantity
-
-    if actual_gain <= ZERO:
-        ordinary_income = ZERO
-    else:
-        ordinary_income = min(actual_gain, benefit)
+        ordinary_income = benefit
 
     capital_gain = actual_gain - ordinary_income
     return ordinary_income, capital_gain
@@ -278,6 +285,8 @@ def plugin(entries, options_map, config=None):
                 "cfg": cfg,
                 "ticker": ticker,
             }
+            # DEBUG
+            print(f"[ESPPresso] Stored lot key={key} lot={espp_lots[key]}")
 
     # ------------------------------------------------------------------
     # Pass 2 – rewrite sell transactions that involve ESPP lots
@@ -314,6 +323,9 @@ def plugin(entries, options_map, config=None):
             if lot is None:
                 continue  # Not an ESPP lot we know about
 
+            # DEBUG
+            print(f"[ESPPresso] Found lot for sell key={key}: {lot}")
+
             if posting.price is None:
                 errors.append(
                     ESPPError(
@@ -335,6 +347,7 @@ def plugin(entries, options_map, config=None):
             qualifying = _is_qualifying(
                 lot["grant_date"], lot["purchase_date"], entry.date
             )
+            print(f"[ESPPresso] qualifying={qualifying}")
             ordinary_income, _capital_gain = _compute_income(
                 purchase_price=purchase_price,
                 fmv_grant=lot["fmv_grant"],

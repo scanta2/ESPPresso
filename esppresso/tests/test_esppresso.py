@@ -13,7 +13,7 @@ import os
 # Ensure ESPPresso.py is importable when running tests from the repo root
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import ESPPresso
+import esppresso
 
 
 # ---------------------------------------------------------------------------
@@ -43,7 +43,7 @@ BUY_TXN = textwrap.dedent("""\
 def _load(extra_txn, config=CONFIG, open_accounts=OPEN_ACCOUNTS, buy_txn=BUY_TXN):
     """Load a beancount string with the ESPPresso plugin and return (entries, errors)."""
     text = "\n".join([
-        f'plugin "ESPPresso" "{config}"',
+        f'plugin "esppresso" "{config}"',
         "",
         open_accounts,
         buy_txn,
@@ -75,7 +75,7 @@ class TestComputeIncome(unittest.TestCase):
 
     def _call(self, sale_price, qualifying=True, quantity=1,
               purchase_price=90, fmv_grant=100, fmv_acquisition=200, discount_pct=10):
-        return ESPPresso._compute_income(
+        return esppresso._compute_income(
             purchase_price=Decimal(str(purchase_price)),
             fmv_grant=Decimal(str(fmv_grant)),
             fmv_acquisition=Decimal(str(fmv_acquisition)),
@@ -120,16 +120,16 @@ class TestComputeIncome(unittest.TestCase):
         self.assertEqual(cap_gain, Decimal("50"))
 
     def test_disqualifying_actual_gain_less_than_bargain_element(self):
-        # actual_gain=60, bargain_element=110 → ord_income=60, cap_gain=0
+        # actual_gain=60, bargain_element=110 → ord_income=110, cap_gain=-50
         ord_income, cap_gain = self._call(sale_price=150, qualifying=False)
-        self.assertEqual(ord_income, Decimal("60"))
-        self.assertEqual(cap_gain, Decimal("0"))
+        self.assertEqual(ord_income, Decimal("110"))
+        self.assertEqual(cap_gain, Decimal("-50"))
 
     def test_disqualifying_no_income_on_loss(self):
         # actual_gain<0 → no ordinary income
         ord_income, cap_gain = self._call(sale_price=85, qualifying=False)
-        self.assertEqual(ord_income, Decimal("0"))
-        self.assertEqual(cap_gain, Decimal("-5"))
+        self.assertEqual(ord_income, Decimal("110"))
+        self.assertEqual(cap_gain, Decimal("-115"))
 
 
 class TestIsQualifying(unittest.TestCase):
@@ -140,7 +140,7 @@ class TestIsQualifying(unittest.TestCase):
     def _call(self, grant_year, purchase_year, sale_year,
               grant_month=1, purchase_month=1, sale_month=1):
         from datetime import date
-        return ESPPresso._is_qualifying(
+        return esppresso._is_qualifying(
             grant_date=date(grant_year, grant_month, 1),
             purchase_date=date(purchase_year, purchase_month, 1),
             sale_date=date(sale_year, sale_month, 1),
@@ -163,15 +163,15 @@ class TestIsQualifying(unittest.TestCase):
         from datetime import date
         grant = date(2020, 1, 1)
         purchase = date(2020, 6, 1)
-        sale_boundary = ESPPresso._add_years(grant, 2)  # exactly 2yr
+        sale_boundary = esppresso._add_years(grant, 2)  # exactly 2yr
         self.assertFalse(
-            ESPPresso._is_qualifying(grant, purchase, sale_boundary)
+            esppresso._is_qualifying(grant, purchase, sale_boundary)
         )
 
 
 class TestParseConfig(unittest.TestCase):
     def test_single_dict(self):
-        cfg = ESPPresso._parse_config(
+        cfg = esppresso._parse_config(
             "{'Asset': 'Assets:ESPP:{ticker}', 'CapGain': 'Income:CG:{ticker}', 'OrdIncome': 'Income:Ord'}"
         )
         self.assertEqual(len(cfg), 1)
@@ -180,29 +180,29 @@ class TestParseConfig(unittest.TestCase):
         self.assertEqual(cfg[0]["ordincome_template"], "Income:Ord")
 
     def test_list_of_dicts(self):
-        cfg = ESPPresso._parse_config(
+        cfg = esppresso._parse_config(
             "[{'Asset': 'A:{ticker}', 'CapGain': 'CG:{ticker}', 'OrdIncome': 'OI'},"
             " {'Asset': 'B:{ticker}', 'CapGain': 'CG2:{ticker}', 'OrdIncome': 'OI2'}]"
         )
         self.assertEqual(len(cfg), 2)
 
     def test_empty_config(self):
-        self.assertEqual(ESPPresso._parse_config(""), [])
-        self.assertEqual(ESPPresso._parse_config(None), [])
+        self.assertEqual(esppresso._parse_config(""), [])
+        self.assertEqual(esppresso._parse_config(None), [])
 
 
 class TestTickerExtraction(unittest.TestCase):
     def test_extracts_ticker(self):
-        pattern = ESPPresso._ticker_pattern("Assets:ESPP:{ticker}")
-        self.assertEqual(ESPPresso._extract_ticker("Assets:ESPP:HOOLI", pattern), "HOOLI")
-        self.assertIsNone(ESPPresso._extract_ticker("Assets:Brokerage:HOOLI", pattern))
+        pattern = esppresso._ticker_pattern("Assets:ESPP:{ticker}")
+        self.assertEqual(esppresso._extract_ticker("Assets:ESPP:HOOLI", pattern), "HOOLI")
+        self.assertIsNone(esppresso._extract_ticker("Assets:Brokerage:HOOLI", pattern))
 
     def test_no_ticker_placeholder(self):
         # A fixed (non-parameterised) template matches the account and returns ""
-        pattern = ESPPresso._ticker_pattern("Assets:ESPP:FIXED")
-        self.assertEqual(ESPPresso._extract_ticker("Assets:ESPP:FIXED", pattern), "")
+        pattern = esppresso._ticker_pattern("Assets:ESPP:FIXED")
+        self.assertEqual(esppresso._extract_ticker("Assets:ESPP:FIXED", pattern), "")
         # A different account does not match at all → None
-        self.assertIsNone(ESPPresso._extract_ticker("Assets:ESPP:OTHER", pattern))
+        self.assertIsNone(esppresso._extract_ticker("Assets:ESPP:OTHER", pattern))
 
 
 # ---------------------------------------------------------------------------
@@ -432,7 +432,7 @@ class TestMultipleTickers(unittest.TestCase):
               Income:Capital-Gain:ACME
         """)
         text = "\n".join([
-            f'plugin "ESPPresso" "{CONFIG}"',
+            f'plugin "esppresso" "{CONFIG}"',
             "",
             OPEN_ACCOUNTS,
             extra_open,
@@ -503,11 +503,11 @@ class TestQualifyingSmallGain(unittest.TestCase):
 
 
 class TestDisqualifyingAtLoss(unittest.TestCase):
-    """Disqualifying disposition at a loss — no ordinary income recognised."""
+    """Disqualifying disposition at a loss - ordinary income and capital loss."""
 
     def setUp(self):
         # Sale on 2024-06-01 (only ~4 months after purchase → disqualifying)
-        # Sale at 80 USD: actual_gain = 80-90 = -10 → no ordinary income
+        # Sale at 80 USD: actual_gain = 80-90 = -10 → ordinary income = -110, capital gain = 120 (net loss of 10)
         sell = textwrap.dedent("""\
             2024-06-01 * "Sell"
               Assets:ESPP:HOOLI -1 HOOLI {90 USD, 2024-01-31} @ 80 USD
@@ -519,15 +519,10 @@ class TestDisqualifyingAtLoss(unittest.TestCase):
     def test_no_errors(self):
         self.assertEqual([], self.errors)
 
-    def test_no_ordinary_income_posting(self):
-        txn = _sell_txn(self.entries)
-        self.assertIsNone(_posting(txn, "Income:Ordinary"))
-
-    def test_capital_loss_unchanged(self):
+    def test_capital_loss(self):
         txn = _sell_txn(self.entries)
         p = _posting(txn, "Income:Capital-Gain:HOOLI")
-        # auto-balanced: -(80-90) = 10 USD (positive = debit to income = capital loss)
-        self.assertEqual(p.units.number, Decimal("10"))
+        self.assertEqual(p.units.number, Decimal("120"))
 
 
 class TestFixedAccountConfig(unittest.TestCase):
@@ -543,7 +538,7 @@ class TestFixedAccountConfig(unittest.TestCase):
         # qualifying: sell 2+ years after grant, 1+ year after purchase
         sell_date = "2026-02-01" if qualifying else "2024-06-01"
         text = "\n".join([
-            f'plugin "ESPPresso" "{self.FIXED_CONFIG}"',
+            f'plugin "esppresso" "{self.FIXED_CONFIG}"',
             "",
             "2020-01-01 open Assets:ESPP:HOOLI HOOLI",
             "2020-01-01 open Assets:ESPP:Cash USD",
@@ -595,7 +590,7 @@ class TestFixedAccountConfig(unittest.TestCase):
     def test_unrelated_account_not_matched(self):
         """A different asset account is not touched by a fixed-account config."""
         text = "\n".join([
-            f'plugin "ESPPresso" "{self.FIXED_CONFIG}"',
+            f'plugin "esppresso" "{self.FIXED_CONFIG}"',
             "",
             "2020-01-01 open Assets:ESPP:HOOLI HOOLI",
             "2020-01-01 open Assets:ESPP:ACME ACME",
@@ -632,7 +627,7 @@ class TestEmptyConfig(unittest.TestCase):
 
     def setUp(self):
         text = textwrap.dedent("""\
-            plugin "ESPPresso"
+            plugin "esppresso"
 
             2020-01-01 open Assets:ESPP:HOOLI HOOLI
             2020-01-01 open Assets:ESPP:Cash USD

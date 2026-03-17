@@ -29,7 +29,7 @@ No ordinary income is recognised if the sale is at a loss.
 ## Installation
 
 ```bash
-pip install ESPPresso
+pip install esppresso
 ```
 
 Or install from source:
@@ -43,7 +43,7 @@ pip install -e .
 ### 1. Configure the plugin in your beancount file
 
 ```beancount
-plugin "ESPPresso" "[{'Asset': 'Assets:ESPP:{ticker}', 'CapGain': 'Income:Capital-Gain:{ticker}', 'OrdIncome': 'Income:Ordinary'}]"
+plugin "esppresso" "[{'Asset': 'Assets:ESPP:{ticker}', 'CapGain': 'Income:Capital-Gain:{ticker}', 'OrdIncome': 'Income:Ordinary'}]"
 ```
 
 `{ticker}` is a placeholder that is replaced with the actual stock ticker
@@ -52,7 +52,7 @@ it, all three account names are treated as literal fixed strings (useful when
 you have a single-ticker ESPP plan):
 
 ```beancount
-plugin "ESPPresso" "[{'Asset': 'Assets:ESPP:HOOLI', 'CapGain': 'Income:Capital-Gain:HOOLI', 'OrdIncome': 'Income:Ordinary'}]"
+plugin "esppresso" "[{'Asset': 'Assets:ESPP:HOOLI', 'CapGain': 'Income:Capital-Gain:HOOLI', 'OrdIncome': 'Income:Ordinary'}]"
 ```
 
 You can list multiple config dicts in the array to support multiple ESPP plans
