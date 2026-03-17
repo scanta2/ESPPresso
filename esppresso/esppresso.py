@@ -1,4 +1,4 @@
-"""esprresso: Beancount plugin to compute ordinary income for ESPP dispositions.
+"""esppresso: Beancount plugin to compute ordinary income for ESPP dispositions.
 
 Handles Section 423 ESPP (Employee Stock Purchase Plan) tax rules:
   - Qualifying disposition: sold > 2 years after grant date AND > 1 year after purchase date
@@ -17,7 +17,7 @@ where:
 
 Configuration in your beancount file:
 
-  plugin "esprresso" "[{'Asset': 'Assets:ESPP:{ticker}', 'CapGain': 'Income:Capital-Gain:{ticker}', 'OrdIncome': 'Income:Ordinary'}]"
+    plugin "esppresso.esppresso" "[{'Asset': 'Assets:ESPP:{ticker}', 'CapGain': 'Income:Capital-Gain:{ticker}', 'OrdIncome': 'Income:Ordinary'}]"
 
 Multiple ESPP plans are supported by listing multiple config dicts in the array.
 
@@ -51,7 +51,8 @@ from beancount.core import data
 from beancount.core.amount import Amount
 from beancount.core.number import ZERO
 
-__plugins__ = ("plugin",)
+__plugins__ = ("esppresso",)
+DEBUG = 0
 
 ESPPError = collections.namedtuple("ESPPError", "source message entry")
 
@@ -72,10 +73,10 @@ def _extract_ticker(account, pattern):
     """Return the ticker captured from *account* using a compiled pattern.
 
     Returns:
-      None  – the account does not match the pattern at all.
-      ""    – the account matches but the pattern has no ``{ticker}`` group
+      None  - the account does not match the pattern at all.
+      ""    - the account matches but the pattern has no ``{ticker}`` group
               (i.e. a fixed-account configuration with no ticker placeholder).
-      str   – the captured ticker string.
+      str   - the captured ticker string.
     """
     m = pattern.match(account)
     if not m:
@@ -213,10 +214,10 @@ def _compute_income(
 
     if qualifying:
         benefit = fmv_grant * (discount_pct / Decimal("100")) * quantity
-        ordinary_income = max(0,min(actual_gain, benefit))
+        ordinary_income = round(max(0,min(actual_gain, benefit)), 2)
     else:
         benefit = (fmv_acquisition - purchase_price) * quantity
-        ordinary_income = benefit
+        ordinary_income = round(benefit, 2)
 
     capital_gain = actual_gain - ordinary_income
     return ordinary_income, capital_gain
@@ -226,7 +227,7 @@ def _compute_income(
 # Plugin entry point
 # ---------------------------------------------------------------------------
 
-def plugin(entries, options_map, config=None):
+def esppresso(entries, options_map, config=None):
     """ESPPresso plugin entry point.
 
     Rewrites ESPP sell transactions to split the auto-balanced capital-gain
@@ -285,8 +286,8 @@ def plugin(entries, options_map, config=None):
                 "cfg": cfg,
                 "ticker": ticker,
             }
-            # DEBUG
-            print(f"[ESPPresso] Stored lot key={key} lot={espp_lots[key]}")
+            if DEBUG:
+                print(f"[ESPPresso] Stored lot key={key} lot={espp_lots[key]}")
 
     # ------------------------------------------------------------------
     # Pass 2 – rewrite sell transactions that involve ESPP lots
@@ -323,8 +324,8 @@ def plugin(entries, options_map, config=None):
             if lot is None:
                 continue  # Not an ESPP lot we know about
 
-            # DEBUG
-            print(f"[ESPPresso] Found lot for sell key={key}: {lot}")
+            if DEBUG:
+                print(f"[ESPPresso] Found lot for sell key={key}: {lot}")
 
             if posting.price is None:
                 errors.append(
@@ -347,7 +348,8 @@ def plugin(entries, options_map, config=None):
             qualifying = _is_qualifying(
                 lot["grant_date"], lot["purchase_date"], entry.date
             )
-            print(f"[ESPPresso] qualifying={qualifying}")
+            if DEBUG:
+                print(f"[ESPPresso] qualifying={qualifying}")
             ordinary_income, _capital_gain = _compute_income(
                 purchase_price=purchase_price,
                 fmv_grant=lot["fmv_grant"],

@@ -28,14 +28,10 @@ No ordinary income is recognised if the sale is at a loss.
 
 ## Installation
 
-```bash
-pip install esppresso
-```
-
-Or install from source:
+Install from source:
 
 ```bash
-pip install -e .
+pip3 install git+https://github.com/scanta2/ESPPresso
 ```
 
 ## Usage
@@ -43,7 +39,7 @@ pip install -e .
 ### 1. Configure the plugin in your beancount file
 
 ```beancount
-plugin "esppresso" "[{'Asset': 'Assets:ESPP:{ticker}', 'CapGain': 'Income:Capital-Gain:{ticker}', 'OrdIncome': 'Income:Ordinary'}]"
+plugin "esppresso.esppresso" "[{'Asset': 'Assets:ESPP:{ticker}', 'CapGain': 'Income:Capital-Gain:{ticker}', 'OrdIncome': 'Income:Ordinary'}]"
 ```
 
 `{ticker}` is a placeholder that is replaced with the actual stock ticker
@@ -52,7 +48,7 @@ it, all three account names are treated as literal fixed strings (useful when
 you have a single-ticker ESPP plan):
 
 ```beancount
-plugin "esppresso" "[{'Asset': 'Assets:ESPP:HOOLI', 'CapGain': 'Income:Capital-Gain:HOOLI', 'OrdIncome': 'Income:Ordinary'}]"
+plugin "esppresso.esppresso" "[{'Asset': 'Assets:ESPP:HOOLI', 'CapGain': 'Income:Capital-Gain:HOOLI', 'OrdIncome': 'Income:Ordinary'}]"
 ```
 
 You can list multiple config dicts in the array to support multiple ESPP plans
@@ -188,7 +184,7 @@ The capital-gain posting is left unchanged (a capital loss).
 
 Sold before satisfying the qualifying holding periods (e.g. only 4 months after purchase).
 Sale at **200 USD**: bargain\_element = 110, actual\_gain = 110,
-ordinary\_income = min(110, 110) = **110 USD**, capital\_gain = 0.
+ordinary\_income = **110 USD**, capital\_gain = 0.
 
 ```beancount
 ; After the plugin runs:
@@ -204,7 +200,7 @@ ordinary\_income = min(110, 110) = **110 USD**, capital\_gain = 0.
 ### Disqualifying — gain above bargain element (ordinary income + capital gain)
 
 Sale at **250 USD**: bargain\_element = 110, actual\_gain = 160,
-ordinary\_income = min(110, 160) = **110 USD**, capital\_gain = **50 USD**.
+ordinary\_income = **110 USD**, capital\_gain = **50 USD**.
 
 ```beancount
 ; After the plugin runs:
@@ -219,15 +215,17 @@ ordinary\_income = min(110, 160) = **110 USD**, capital\_gain = **50 USD**.
 
 ### Disqualifying — sale at a loss
 
-Sale at **80 USD**: actual\_gain = −10 → no ordinary income, regardless of
-disposition type. The capital-gain posting is left unchanged.
+Sale at **80 USD**: bargain\_element = 110, actual\_loss = 10.
+ordinary\_income = **110 USD**, capital\_loss = **120 USD**.
+
 
 ```beancount
-; After the plugin runs (no change to income split):
+; After the plugin runs:
 2024-06-01 * "ESPP Sale"
   Assets:ESPP:HOOLI -1 HOOLI {90 USD, 2024-01-31} @ 80 USD
   Assets:ESPP:Cash 80 USD
-  Income:Capital-Gain:HOOLI  10 USD   ; capital loss (unchanged)
+  Income:Capital-Gain:HOOLI  120 USD   ; capital loss
+  Income:Ordinary           -110 USD   ; added by ESPPresso (W-2 income)
 ```
 
 ---
