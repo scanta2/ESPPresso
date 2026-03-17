@@ -19,7 +19,7 @@ When you sell ESPP shares, the plugin:
 | | Qualifying | Disqualifying |
 |---|---|---|
 | **Condition** | Held > 2 years from grant date **and** > 1 year from purchase date | Sold before satisfying qualifying conditions |
-| **Ordinary income** | `min(fmv_grant × discount%, actual_gain)` | `min(fmv_acquisition − purchase_price, actual_gain)` |
+| **Ordinary income** | `min(fmv_grant × discount%, actual_gain)` | `fmv_acquisition − purchase_price` |
 | **Capital gain/loss** | `actual_gain − ordinary_income` (long-term) | `actual_gain − ordinary_income` |
 
 where `actual_gain = (sale_price − purchase_price) × quantity`.
