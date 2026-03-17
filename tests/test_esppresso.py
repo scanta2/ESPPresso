@@ -467,6 +467,69 @@ class TestMultipleTickers(unittest.TestCase):
         self.assertEqual(p.units.number, Decimal("-100"))
 
 
+class TestQualifyingSmallGain(unittest.TestCase):
+    """Qualifying disposition where actual gain < plan discount (ordinary income capped)."""
+
+    def setUp(self):
+        # Sale at 93 USD: actual_gain = 93-90 = 3, plan_discount = 10
+        # → ord_income = min(10, 3) = 3, cap_gain = 0
+        sell = textwrap.dedent("""\
+            2026-02-01 * "Sell"
+              Assets:ESPP:HOOLI -1 HOOLI {90 USD, 2024-01-31} @ 93 USD
+              Assets:ESPP:Cash 93 USD
+              Income:Capital-Gain:HOOLI
+        """)
+        self.entries, self.errors, _ = _load(sell)
+
+    def test_no_errors(self):
+        self.assertEqual([], self.errors)
+
+    def test_ordinary_income_capped_by_actual_gain(self):
+        txn = _sell_txn(self.entries)
+        p = _posting(txn, "Income:Ordinary")
+        self.assertIsNotNone(p)
+        # Capped at actual gain of 3, not plan discount of 10
+        self.assertEqual(p.units.number, Decimal("-3"))
+
+    def test_capital_gain_is_zero(self):
+        txn = _sell_txn(self.entries)
+        p = _posting(txn, "Income:Capital-Gain:HOOLI")
+        self.assertIsNotNone(p)
+        # Original auto-balanced: -(93-90) = -3; adjusted: -3 + 3 = 0
+        self.assertEqual(p.units.number, Decimal("0"))
+
+    def test_transaction_still_balances(self):
+        self.assertEqual([], self.errors)
+
+
+class TestDisqualifyingAtLoss(unittest.TestCase):
+    """Disqualifying disposition at a loss — no ordinary income recognised."""
+
+    def setUp(self):
+        # Sale on 2024-06-01 (only ~4 months after purchase → disqualifying)
+        # Sale at 80 USD: actual_gain = 80-90 = -10 → no ordinary income
+        sell = textwrap.dedent("""\
+            2024-06-01 * "Sell"
+              Assets:ESPP:HOOLI -1 HOOLI {90 USD, 2024-01-31} @ 80 USD
+              Assets:ESPP:Cash 80 USD
+              Income:Capital-Gain:HOOLI
+        """)
+        self.entries, self.errors, _ = _load(sell)
+
+    def test_no_errors(self):
+        self.assertEqual([], self.errors)
+
+    def test_no_ordinary_income_posting(self):
+        txn = _sell_txn(self.entries)
+        self.assertIsNone(_posting(txn, "Income:Ordinary"))
+
+    def test_capital_loss_unchanged(self):
+        txn = _sell_txn(self.entries)
+        p = _posting(txn, "Income:Capital-Gain:HOOLI")
+        # auto-balanced: -(80-90) = 10 USD (positive = debit to income = capital loss)
+        self.assertEqual(p.units.number, Decimal("10"))
+
+
 class TestFixedAccountConfig(unittest.TestCase):
     """Config with no {ticker} placeholder — all accounts are named literally."""
 
