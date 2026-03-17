@@ -1,2 +1,2 @@
 # ESPPresso
-Beancount plugin to compute ordinary income for ESPP dispositions
+A Beancount plugin to compute the portion of an ESPP lot disposition that will be taxed as ordinary income.
