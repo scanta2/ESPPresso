@@ -26,6 +26,13 @@ where `actual_gain = (sale_price − purchase_price) × quantity`.
 
 No ordinary income is recognised if the sale is at a loss.
 
+I am not an accountant, and nothing in my communication should be interpreted as
+financial, tax, or legal advice. I strongly recommend consulting with a qualified
+professional before making any financial decisions.
+
+The implementation of this plugin is based on information found
+[here](https://www.schwab.com/learn/story/espp-taxes).
+
 ## Installation
 
 Install from source:
